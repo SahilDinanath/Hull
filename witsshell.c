@@ -20,7 +20,8 @@ int main(int MainArgc, char *MainArgv[]) {
   ssize_t nread;
   //
   // SETTINGS
-  char path[] = "/usr/bin/env";
+  char path[] = "/bin/";
+  int interactive = 1;
 
   if (MainArgc > 2) {
     errmsg();
@@ -28,58 +29,63 @@ int main(int MainArgc, char *MainArgv[]) {
   }
 
   if (MainArgc == 2) {
+    interactive = 0;
     if ((stream = fopen(MainArgv[1], "r")) == NULL) {
       errmsg();
       exit(EXIT_FAILURE);
     }
   }
 
-  printf("witsshell> ");
-  while ((nread = getline(&line, &len, stream)) != -1) {
-    // remove newline
-    line[strcspn(line, "\n")] = 0;
-
-    // INSERT BUILT-INS HERE
-    // any string retrieved with getline ends with \n
-    if (strcmp(line, "exit") == 0) {
-      exit(EXIT_SUCCESS);
+  do {
+    if (interactive) {
+      printf("witsshell> ");
     }
 
-    // fwrite(line, nread, 1, stdout);
-    int pid = fork();
+    if ((nread = getline(&line, &len, stream)) != -1) {
+      // remove newline
+      line[strcspn(line, "\n")] = '\0';
 
-    if (pid == 0) {
-      /*
-       * NixOS doesn't have a regular filesystem, so I have to execute bins
-       * through env MAKE SURE TO MAKE IT WORK WITH REGULAR PATHS /bin/
-       * /usr/bin/ etc etc etc TEST ON DISTROBOX
-       * */
-      char *env = path;
-      // when searching different paths probably need to make a for loop
-      // appending bin to the end of each path and attempting to run that, if
-      // none run then err. strcat(bin, path);
-      //  strcat(bin, " ");
-      //  strcat(bin, line);
-      char *argend = NULL;
-      char *args[100];
-      char *token;
-
-      unsigned int j = 0;
-      for (j = 0; (token = strsep(&line, " ")); j++) {
-        args[j] = token;
+      if (strcmp(line, "exit") == 0) {
+        exit(EXIT_SUCCESS);
       }
+      // fwrite(line, nread, 1, stdout);
+      int pid = fork();
 
-      // args array suplied to execv needs to be terminated by null pointer
-      args[j++] = argend;
+      if (pid == 0) {
+        /*
+         * NixOS doesn't have a regular filesystem, so I have to execute bins
+         * through env MAKE SURE TO MAKE IT WORK WITH REGULAR PATHS /bin/
+         * /usr/bin/ etc etc etc TEST ON DISTROBOX
+         * */
+        char bin[1000];
+        // TODO: when searching different paths probably need to make a for loop
+        // appending bin to the end of each path and attempting to run that, if
+        // none run then err. strcat(bin, path);
+        char *argend = NULL;
+        char *args[100];
+        char *token;
 
-      execv(env, args);
-      exit(EXIT_SUCCESS);
-    } else {
-      wait(NULL);
+        unsigned int j = 0;
+        for (j = 0; (token = strsep(&line, " ")); j++) {
+          args[j] = token;
+        }
+        strcat(bin, path);
+        strcat(bin, args[0]);
+
+        // args array suplied to execv needs to be terminated by null pointer
+        args[j++] = argend;
+
+        if (execv(bin, args) == -1) {
+          errmsg();
+          exit(EXIT_FAILURE);
+        }
+        exit(EXIT_SUCCESS);
+      } else {
+        wait(NULL);
+      }
     }
 
-    printf("witsshell> ");
-  }
+  } while (1);
 
   free(line);
   fclose(stream);
