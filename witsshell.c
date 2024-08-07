@@ -45,6 +45,7 @@ int main(int MainArgc, char *MainArgv[]) {
       // remove newline
       line[strcspn(line, "\n")] = 0;
 
+      // BUILTIN EXIT
       if (strcmp(line, "exit") == 0) {
         exit(EXIT_SUCCESS);
       }
@@ -67,19 +68,13 @@ int main(int MainArgc, char *MainArgv[]) {
         args[j] = token;
       }
 
-      // TODO: you need to implement directory switching as a builtin
-      // you need to process the arguments,
-      // so your next goal is to extract the line parsing code
-      // so you can call it in this if statement
+      // BUILTIN CD
       if (strcmp(args[0], "cd") == 0) {
-        if (j > 2) {
+        if (j > 2 || chdir(args[1]) == -1) {
           errmsg();
-          exit(EXIT_FAILURE);
+          return 0;
         }
-        if (chdir(args[1]) == -1) {
-          errmsg();
-          exit(EXIT_FAILURE);
-        }
+
         continue;
       }
 
@@ -90,16 +85,13 @@ int main(int MainArgc, char *MainArgv[]) {
 
       // args array suplied to execv needs to be terminated by null pointer
       args[j] = argend;
-      // need to exclude first arg as that is the command
-      args[0] = "";
       // fwrite(line, nread, 1, stdout);
       int pid = fork();
       if (pid == 0) {
         if (execv(bin, args) == -1) {
           errmsg();
-          exit(EXIT_FAILURE);
         }
-        exit(EXIT_SUCCESS);
+        return 0;
       } else {
         wait(NULL);
       }
@@ -108,5 +100,5 @@ int main(int MainArgc, char *MainArgv[]) {
 
   free(line);
   fclose(stream);
-  exit(EXIT_SUCCESS);
+  return 0;
 }
