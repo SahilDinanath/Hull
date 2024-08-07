@@ -20,7 +20,8 @@ int main(int MainArgc, char *MainArgv[]) {
   ssize_t nread = 0;
   //
   // SETTINGS
-  char path[] = "/bin/";
+  int pathc = 1;
+  char *path[100] = {"/bin/"};
   int interactive = 1;
 
   if (MainArgc > 2) {
@@ -54,7 +55,6 @@ int main(int MainArgc, char *MainArgv[]) {
        * through env MAKE SURE TO MAKE IT WORK WITH REGULAR PATHS /bin/
        * /usr/bin/ etc etc etc TEST ON DISTROBOX
        * */
-      char bin[1000] = {""};
       // TODO: when searching different paths probably need to make a for loop
       // appending bin to the end of each path and attempting to run that, if
       // none run then err. strcat(bin, path);
@@ -63,37 +63,56 @@ int main(int MainArgc, char *MainArgv[]) {
       char *token = NULL;
 
       // process args
-      unsigned int j = 0;
-      for (j = 0; (token = strsep(&line, " ")); j++) {
-        args[j] = token;
+      unsigned int argc = 0;
+      for (argc = 0; (token = strsep(&line, " ")); argc++) {
+        args[argc] = token;
       }
 
       // BUILTIN CD
       if (strcmp(args[0], "cd") == 0) {
-        if (j > 2 || chdir(args[1]) == -1) {
+        if (argc > 2 || chdir(args[1]) == -1) {
           errmsg();
           return 0;
         }
-
         continue;
       }
 
-      // preping data before fork
-      // remember to initialize dest with null value before trying to strcat.
-      strcat(bin, path);
-      strcat(bin, args[0]);
+      // BUILTIN PATH
 
-      // args array suplied to execv needs to be terminated by null pointer
-      args[j] = argend;
-      // fwrite(line, nread, 1, stdout);
-      int pid = fork();
-      if (pid == 0) {
-        if (execv(bin, args) == -1) {
-          errmsg();
+      if (strcmp(args[0], "path") == 0) {
+        // exclude the first arg which is the bin
+        // set path count to 0
+        pathc = 0;
+        for (int i = 1; i < argc; i++) {
+          path[i - 1] = args[i];
+          pathc++;
         }
-        return 0;
-      } else {
-        wait(NULL);
+        continue;
+      }
+      // preping data before fork
+      int success = 0;
+      for (int i = 0; i < pathc; i++) {
+        // remember to initialize dest with null value before trying to
+        // strcat.
+        char bin[100] = {""};
+        strcat(bin, path[i]);
+        strcat(bin, args[0]);
+
+        // args array suplied to execv needs to be terminated by null pointer
+        args[argc] = argend;
+        int pid = fork();
+        if (pid == 0) {
+          if (execv(bin, args) == -1) {
+            errmsg();
+            return 1;
+          }
+          return 0;
+        } else {
+          wait(&success);
+          if (WEXITSTATUS(success)) {
+            break;
+          }
+        }
       }
     }
   };
