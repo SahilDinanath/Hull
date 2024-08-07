@@ -91,7 +91,6 @@ int main(int MainArgc, char *MainArgv[]) {
       }
 
       // search for executable in path
-
       int success = 0;
       // remember to initialize dest with null value before trying to
       // strcat.
@@ -118,6 +117,30 @@ int main(int MainArgc, char *MainArgv[]) {
       args[argc] = argend;
       int pid = fork();
       if (pid == 0) {
+
+        // BUILTIN redirect
+        // redirect runs here due to changing of file descriptors
+        // change file descriptor if redirect is used
+        for (int i = 0; i < argc; i++) {
+          if (strcmp(args[i], ">") == 0) {
+            if (i + 1 != argc) {
+              errmsg();
+              return 1;
+            }
+            //
+            int file = open(args[i + 1], O_RDWR | O_CREAT, S_IRUSR | S_IWUSR);
+
+            dup2(file, 1);
+            dup2(file, 2);
+            close(file);
+            // remove redirect from args list
+            argc = i - 1;
+            // modify the ending of args parameter list
+            args[argc] = argend;
+            break;
+          }
+        }
+
         if (execv(binpath, args) == -1) {
           return 1;
         }
