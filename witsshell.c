@@ -20,8 +20,8 @@ int main(int MainArgc, char *MainArgv[]) {
   ssize_t nread = 0;
   //
   // SETTINGS
-  int pathc = 1;
-  char *path[100] = {"/bin/"};
+  int pathc = 2;
+  char *path[100] = {"", "/bin/"};
   int interactive = 1;
 
   if (MainArgc > 2) {
@@ -80,39 +80,50 @@ int main(int MainArgc, char *MainArgv[]) {
       // BUILTIN PATH
 
       if (strcmp(args[0], "path") == 0) {
-        // exclude the first arg which is the bin
-        // set path count to 0
-        pathc = 0;
+        // reset pathc to base possible path ie: the empty string
+        pathc = 1;
+        path[0] = "";
         for (int i = 1; i < argc; i++) {
-          path[i - 1] = args[i];
+          path[i] = args[i];
           pathc++;
         }
         continue;
       }
-      // preping data before fork
-      int success = 0;
-      for (int i = 0; i < pathc; i++) {
-        // remember to initialize dest with null value before trying to
-        // strcat.
-        char bin[100] = {""};
-        strcat(bin, path[i]);
-        strcat(bin, args[0]);
 
-        // args array suplied to execv needs to be terminated by null pointer
-        args[argc] = argend;
-        int pid = fork();
-        if (pid == 0) {
-          if (execv(bin, args) == -1) {
-            errmsg();
-            return 1;
-          }
-          return 0;
-        } else {
-          wait(&success);
-          if (WEXITSTATUS(success)) {
-            break;
-          }
+      // search for executable in path
+
+      int success = 0;
+      // remember to initialize dest with null value before trying to
+      // strcat.
+      char binpath[100] = {""};
+      for (int i = 0; i < pathc; i++) {
+        strcat(binpath, path[i]);
+        strcat(binpath, args[0]);
+
+        if (access(binpath, F_OK) == 0) {
+          success = 1;
+          break;
         }
+        memset(binpath, 0, strlen(binpath));
+      }
+
+      // if no path succeeds then continue
+      if (success == 0) {
+        errmsg();
+        continue;
+      }
+
+      // EXECUTE COMMAND
+      // args array suplied to execv needs to be terminated by null pointer
+      args[argc] = argend;
+      int pid = fork();
+      if (pid == 0) {
+        if (execv(binpath, args) == -1) {
+          return 1;
+        }
+        return 0;
+      } else {
+        wait(NULL);
       }
     }
   };
