@@ -43,18 +43,31 @@ int main(int MainArgc, char *MainArgv[]) {
     }
 
     if ((nread = getline(&line, &len, stream)) != -1) {
+      // line preprocessing
       // remove newline
       line[strcspn(line, "\n")] = 0;
+
+      // check for redirect add spaces to make processing easier later on
+      char *temp = malloc(sizeof(char) * 100);
+      int count = 0;
+      for (int i = 0; i < nread; i++) {
+        if (line[i] == '>') {
+          temp[count++] = ' ';
+          temp[count++] = '>';
+          temp[count++] = ' ';
+          continue;
+        }
+        temp[count++] = line[i];
+      }
+      temp[count] = '\0';
+      free(line);
+
+      line = temp;
 
       // BUILTIN EXIT
       if (strcmp(line, "exit") == 0) {
         exit(EXIT_SUCCESS);
       }
-      /*
-       * NixOS doesn't have a regular filesystem, so I have to execute bins
-       * through env MAKE SURE TO MAKE IT WORK WITH REGULAR PATHS /bin/
-       * /usr/bin/ etc etc etc TEST ON DISTROBOX
-       * */
       // TODO: when searching different paths probably need to make a for loop
       // appending bin to the end of each path and attempting to run that, if
       // none run then err. strcat(bin, path);
@@ -63,9 +76,21 @@ int main(int MainArgc, char *MainArgv[]) {
       char *token = NULL;
 
       // process args
+      char *tempargs[100] = {NULL};
       unsigned int argc = 0;
       for (argc = 0; (token = strsep(&line, " ")); argc++) {
-        args[argc] = token;
+        tempargs[argc] = token;
+      }
+
+      // remove extra whitespaces
+      count = 0;
+      int end = argc;
+      for (int i = 0; i < end; i++) {
+        if (*tempargs[i] == '\0') {
+          argc--;
+          continue;
+        }
+        args[count++] = tempargs[i];
       }
 
       // BUILTIN CD
@@ -78,7 +103,6 @@ int main(int MainArgc, char *MainArgv[]) {
       }
 
       // BUILTIN PATH
-
       if (strcmp(args[0], "path") == 0) {
         // reset pathc to base possible path ie: the empty string
         pathc = 1;
@@ -123,11 +147,12 @@ int main(int MainArgc, char *MainArgv[]) {
         // change file descriptor if redirect is used
         for (int i = 0; i < argc; i++) {
           if (strcmp(args[i], ">") == 0) {
-            if (i + 1 != argc) {
+            if (i + 2 != argc) {
               errmsg();
               return 1;
             }
             //
+            // TODO: you need to basically get files fixed or smth
             int file = open(args[i + 1], O_RDWR | O_CREAT, S_IRUSR | S_IWUSR);
 
             dup2(file, 1);
