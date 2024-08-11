@@ -11,6 +11,40 @@ void errmsg() {
   char error_message[30] = "An error has occurred\n";
   write(STDERR_FILENO, error_message, strlen(error_message));
 }
+
+char *leftstrip(char *line, int nread) {
+  char *temp = malloc(sizeof(char) * nread);
+
+  int start = 0;
+  while (start < nread) {
+    if (line[start] != ' ') {
+      break;
+    }
+    start++;
+  }
+
+  strcpy(temp, line + start);
+  free(line);
+  return temp;
+}
+char *redirectformatting(char *line, int nread) {
+  // check for redirect add spaces to make processing easier later on
+  char *temp = malloc(sizeof(char) * nread);
+  int count = 0;
+  for (int i = 0; i < nread; i++) {
+    if (line[i] == '>') {
+      temp[count++] = ' ';
+      temp[count++] = '>';
+      temp[count++] = ' ';
+      continue;
+    }
+    temp[count++] = line[i];
+  }
+  temp[count] = '\0';
+  free(line);
+  return temp;
+}
+
 int main(int MainArgc, char *MainArgv[]) {
   // FILE Settings
   // stdin: 0, stdout: 2, stderr: 3
@@ -47,30 +81,16 @@ int main(int MainArgc, char *MainArgv[]) {
       // remove newline
       line[strcspn(line, "\n")] = 0;
 
-      // check for redirect add spaces to make processing easier later on
-      char *temp = malloc(sizeof(char) * 100);
-      int count = 0;
-      for (int i = 0; i < nread; i++) {
-        if (line[i] == '>') {
-          temp[count++] = ' ';
-          temp[count++] = '>';
-          temp[count++] = ' ';
-          continue;
-        }
-        temp[count++] = line[i];
-      }
-      temp[count] = '\0';
-      free(line);
+      // remove white spaces
+      line = leftstrip(line, nread);
 
-      line = temp;
+      line = redirectformatting(line, nread);
 
       // BUILTIN EXIT
       if (strcmp(line, "exit") == 0) {
         exit(EXIT_SUCCESS);
       }
-      // TODO: when searching different paths probably need to make a for loop
-      // appending bin to the end of each path and attempting to run that, if
-      // none run then err. strcat(bin, path);
+
       char *argend = NULL;
       char *args[100] = {NULL};
       char *token = NULL;
@@ -82,8 +102,10 @@ int main(int MainArgc, char *MainArgv[]) {
         tempargs[argc] = token;
       }
 
+      // strsep will only delete seperate 1 space between, so if extra spaces
+      // are inbetween it will be added as a token.
       // remove extra whitespaces
-      count = 0;
+      int count = 0;
       int end = argc;
       for (int i = 0; i < end; i++) {
         if (*tempargs[i] == '\0') {
