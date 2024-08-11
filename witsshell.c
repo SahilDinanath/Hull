@@ -12,21 +12,15 @@ void errmsg() {
   write(STDERR_FILENO, error_message, strlen(error_message));
 }
 
-char *leftstrip(char *line, int nread) {
-  char *temp = malloc(sizeof(char) * nread);
-
-  int start = 0;
-  while (start < nread) {
-    if (line[start] != ' ') {
-      break;
+int checkforchar(char *line, int nread) {
+  for (int i = 0; i < nread; i++) {
+    if (line[i] != ' ') {
+      return 1;
     }
-    start++;
   }
-
-  strcpy(temp, line + start);
-  free(line);
-  return temp;
+  return 0;
 }
+
 char *redirectformatting(char *line, int nread) {
   // check for redirect add spaces to make processing easier later on
   char *temp = malloc(sizeof(char) * nread);
@@ -79,10 +73,14 @@ int main(int MainArgc, char *MainArgv[]) {
     if ((nread = getline(&line, &len, stream)) != -1) {
       // line preprocessing
       // remove newline
-      line[strcspn(line, "\n")] = 0;
+      line[strcspn(line, "\n")] = '\0';
+      nread--;
 
-      // remove white spaces
-      line = leftstrip(line, nread);
+      // line = leftstrip(line, nread);
+
+      if (!checkforchar(line, nread)) {
+        continue;
+      }
 
       line = redirectformatting(line, nread);
 
