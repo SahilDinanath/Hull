@@ -191,7 +191,7 @@ int main(int MainArgc, char *MainArgv[]) {
               dup2(file, 2);
               close(file);
               // remove redirect from args list
-              argc = i - 1;
+              argc = i;
               // modify the ending of args parameter list
               args[argc] = argend;
               break;
