@@ -23,7 +23,7 @@ int checkforchar(char *line, int nread) {
 
 char *redirectformatting(char *line, int nread) {
   // check for redirect add spaces to make processing easier later on
-  char *temp = malloc(sizeof(char) * nread);
+  char *temp = malloc(sizeof(char) * nread * 2);
   int count = 0;
   for (int i = 0; i < nread; i++) {
     if (line[i] == '>') {
@@ -35,11 +35,11 @@ char *redirectformatting(char *line, int nread) {
     temp[count++] = line[i];
   }
   temp[count] = '\0';
-  free(line);
   return temp;
 }
 
 int main(int MainArgc, char *MainArgv[]) {
+  setbuf(stdout, NULL);
   // FILE Settings
   // stdin: 0, stdout: 2, stderr: 3
   FILE *stream = stdin;
@@ -76,123 +76,136 @@ int main(int MainArgc, char *MainArgv[]) {
       line[strcspn(line, "\n")] = '\0';
       nread--;
 
-      // line = leftstrip(line, nread);
-
-      if (!checkforchar(line, nread)) {
-        continue;
+      char *comv[100] = {NULL};
+      char *com = NULL;
+      unsigned int comc = 0;
+      for (comc = 0; (com = strsep(&line, "&")); comc++) {
+        comv[comc] = com;
       }
 
-      line = redirectformatting(line, nread);
+      for (int c = 0; c < comc; c++) {
+        line = comv[c];
+        int linec = strlen(line);
 
-      // BUILTIN EXIT
-      if (strcmp(line, "exit") == 0) {
-        exit(EXIT_SUCCESS);
-      }
-
-      char *argend = NULL;
-      char *args[100] = {NULL};
-      char *token = NULL;
-
-      // process args
-      char *tempargs[100] = {NULL};
-      unsigned int argc = 0;
-      for (argc = 0; (token = strsep(&line, " ")); argc++) {
-        tempargs[argc] = token;
-      }
-
-      // strsep will only delete seperate 1 space between, so if extra spaces
-      // are inbetween it will be added as a token.
-      // remove extra whitespaces
-      int count = 0;
-      int end = argc;
-      for (int i = 0; i < end; i++) {
-        if (*tempargs[i] == '\0') {
-          argc--;
+        if (!checkforchar(line, strlen(line))) {
           continue;
         }
-        args[count++] = tempargs[i];
-      }
 
-      // BUILTIN CD
-      if (strcmp(args[0], "cd") == 0) {
-        if (argc > 2 || chdir(args[1]) == -1) {
-          errmsg();
-          return 0;
+        line = redirectformatting(line, strlen(line));
+
+        // BUILTIN EXIT
+        if (strcmp(line, "exit") == 0) {
+          exit(EXIT_SUCCESS);
         }
-        continue;
-      }
 
-      // BUILTIN PATH
-      if (strcmp(args[0], "path") == 0) {
-        // reset pathc to base possible path ie: the empty string
-        pathc = 1;
-        path[0] = "";
-        for (int i = 1; i < argc; i++) {
-          path[i] = args[i];
-          pathc++;
+        char *argend = NULL;
+        char *args[100] = {NULL};
+        char *token = NULL;
+
+        // process args
+        char *tempargs[100] = {NULL};
+        unsigned int argc = 0;
+        for (argc = 0; (token = strsep(&line, " ")); argc++) {
+          tempargs[argc] = token;
         }
-        continue;
-      }
 
-      // search for executable in path
-      int success = 0;
-      // remember to initialize dest with null value before trying to
-      // strcat.
-      char binpath[100] = {""};
-      for (int i = 0; i < pathc; i++) {
-        strcat(binpath, path[i]);
-        strcat(binpath, args[0]);
-
-        if (access(binpath, F_OK) == 0) {
-          success = 1;
-          break;
+        // strsep will only delete seperate 1 space between, so if extra spaces
+        // are inbetween it will be added as a token.
+        // remove extra whitespaces
+        int count = 0;
+        int end = argc;
+        for (int i = 0; i < end; i++) {
+          if (*tempargs[i] == '\0') {
+            argc--;
+            continue;
+          }
+          args[count++] = tempargs[i];
         }
-        memset(binpath, 0, strlen(binpath));
-      }
 
-      // if no path succeeds then continue
-      if (success == 0) {
-        errmsg();
-        continue;
-      }
+        // BUILTIN CD
+        if (strcmp(args[0], "cd") == 0) {
+          if (argc > 2 || chdir(args[1]) == -1) {
+            errmsg();
+            return 0;
+          }
+          continue;
+        }
 
-      // EXECUTE COMMAND
-      // args array suplied to execv needs to be terminated by null pointer
-      args[argc] = argend;
-      int pid = fork();
-      if (pid == 0) {
+        // BUILTIN PATH
+        if (strcmp(args[0], "path") == 0) {
+          // reset pathc to base possible path ie: the empty string
+          pathc = 1;
+          path[0] = "";
+          for (int i = 1; i < argc; i++) {
+            path[i] = args[i];
+            pathc++;
+          }
+          continue;
+        }
 
-        // BUILTIN redirect
-        // redirect runs here due to changing of file descriptors
-        // change file descriptor if redirect is used
-        for (int i = 0; i < argc; i++) {
-          if (strcmp(args[i], ">") == 0) {
-            if (i + 2 != argc) {
-              errmsg();
-              return 1;
-            }
-            //
-            // TODO: you need to basically get files fixed or smth
-            int file = open(args[i + 1], O_RDWR | O_CREAT, S_IRUSR | S_IWUSR);
+        // search for executable in path
+        int success = 0;
+        // remember to initialize dest with null value before trying to
+        // strcat.
+        char binpath[100] = {""};
+        for (int i = 0; i < pathc; i++) {
+          strcat(binpath, path[i]);
+          if (path[i][strlen(path[i])] != '/') {
+            strcat(binpath, "/");
+          }
+          strcat(binpath, args[0]);
 
-            dup2(file, 1);
-            dup2(file, 2);
-            close(file);
-            // remove redirect from args list
-            argc = i - 1;
-            // modify the ending of args parameter list
-            args[argc] = argend;
+          if (access(binpath, F_OK) == 0) {
+            success = 1;
             break;
           }
+          memset(binpath, 0, strlen(binpath));
         }
 
-        if (execv(binpath, args) == -1) {
-          return 1;
+        // if no path succeeds then continue
+        if (success == 0) {
+          errmsg();
+          continue;
         }
-        return 0;
-      } else {
-        wait(NULL);
+
+        // EXECUTE COMMAND
+        // args array suplied to execv needs to be terminated by null pointer
+        args[argc] = argend;
+        int pid = fork();
+        if (pid == 0) {
+
+          // BUILTIN redirect
+          // redirect runs here due to changing of file descriptors
+          // change file descriptor if redirect is used
+          for (int i = 0; i < argc; i++) {
+            if (strcmp(args[i], ">") == 0) {
+              if (i + 2 != argc) {
+                errmsg();
+                return 1;
+              }
+              //
+              // TODO: you need to basically get files fixed or smth
+              int file = open(args[i + 1], O_RDWR | O_CREAT, S_IRUSR | S_IWUSR);
+
+              dup2(file, 1);
+              dup2(file, 2);
+              close(file);
+              // remove redirect from args list
+              argc = i - 1;
+              // modify the ending of args parameter list
+              args[argc] = argend;
+              break;
+            }
+          }
+
+          if (execv(binpath, args) == -1) {
+            return 1;
+          }
+          return 0;
+        }
       }
+      while (wait(NULL) > 0)
+        ;
     }
   };
 
