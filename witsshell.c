@@ -37,7 +37,59 @@ char *redirectformatting(char *line, int nread) {
   temp[count] = '\0';
   return temp;
 }
+void removearrspaces(char **des, char **src, unsigned int *argc) {
+  int count = 0;
+  int end = *argc;
+  for (int i = 0; i < end; i++) {
+    if (*src[i] == '\0') {
+      *argc -= 1;
+      continue;
+    }
+    des[count++] = src[i];
+  }
+}
+int processredirect(char **args, unsigned int *argc) {
 
+  for (int i = 0; i < *argc; i++) {
+    if (strcmp(args[i], ">") == 0) {
+      if (i + 2 != *argc) {
+        errmsg();
+        return 1;
+      }
+      int file = open(args[i + 1], O_RDWR | O_CREAT, S_IRUSR | S_IWUSR);
+
+      dup2(file, 1);
+      dup2(file, 2);
+      close(file);
+      // remove redirect from args list
+      *argc = i;
+      // modify the ending of args parameter list
+      args[*argc] = NULL;
+      break;
+    }
+  }
+  return 0;
+}
+// TODO: move searching for bin into function
+/* int searchforbin(char **binpath, char **path, int pathc, char **args) { */
+/*   for (int i = 0; i < pathc; i++) { */
+/*     strcat(*binpath, path[i]); */
+/*     // Adds slash at end if path doesn't contain it. */
+/*     // NOTE: using a gdb, it has been seen this doesn't work correctly, */
+/*     // it adds a / regardless eg: tests//ls. However the function access */
+/*     // seems to be / invariant. So the code still works.... */
+/*     if (path[i][strlen(path[i])] != '/') { */
+/*       strcat(*binpath, "/"); */
+/*     } */
+/*     strcat(*binpath, args[0]); */
+/**/
+/*     if (access(*binpath, F_OK) == 0) { */
+/*       return 0; */
+/*     } */
+/*     memset(*binpath, 0, strlen(*binpath)); */
+/*   } */
+/*   return 1; */
+/* } */
 int main(int MainArgc, char *MainArgv[]) {
   setbuf(stdout, NULL);
   // FILE Settings
@@ -85,7 +137,6 @@ int main(int MainArgc, char *MainArgv[]) {
 
       for (int c = 0; c < comc; c++) {
         line = comv[c];
-        int linec = strlen(line);
 
         if (!checkforchar(line, strlen(line))) {
           continue;
@@ -101,9 +152,9 @@ int main(int MainArgc, char *MainArgv[]) {
         char *argend = NULL;
         char *args[100] = {NULL};
         char *token = NULL;
+        char *tempargs[100] = {NULL};
 
         // process args
-        char *tempargs[100] = {NULL};
         unsigned int argc = 0;
         for (argc = 0; (token = strsep(&line, " ")); argc++) {
           tempargs[argc] = token;
@@ -112,15 +163,7 @@ int main(int MainArgc, char *MainArgv[]) {
         // strsep will only delete seperate 1 space between, so if extra spaces
         // are inbetween it will be added as a token.
         // remove extra whitespaces
-        int count = 0;
-        int end = argc;
-        for (int i = 0; i < end; i++) {
-          if (*tempargs[i] == '\0') {
-            argc--;
-            continue;
-          }
-          args[count++] = tempargs[i];
-        }
+        removearrspaces(args, tempargs, &argc);
 
         // BUILTIN CD
         if (strcmp(args[0], "cd") == 0) {
@@ -150,6 +193,10 @@ int main(int MainArgc, char *MainArgv[]) {
         char binpath[100] = {""};
         for (int i = 0; i < pathc; i++) {
           strcat(binpath, path[i]);
+          // Adds slash at end if path doesn't contain it.
+          // NOTE: using a gdb, it has been seen this doesn't work correctly, it
+          // adds a / regardless eg: tests//ls. However the function access
+          // seems to be / invariant. So the code still works....
           if (path[i][strlen(path[i])] != '/') {
             strcat(binpath, "/");
           }
@@ -173,29 +220,11 @@ int main(int MainArgc, char *MainArgv[]) {
         args[argc] = argend;
         int pid = fork();
         if (pid == 0) {
-
           // BUILTIN redirect
           // redirect runs here due to changing of file descriptors
           // change file descriptor if redirect is used
-          for (int i = 0; i < argc; i++) {
-            if (strcmp(args[i], ">") == 0) {
-              if (i + 2 != argc) {
-                errmsg();
-                return 1;
-              }
-              //
-              // TODO: you need to basically get files fixed or smth
-              int file = open(args[i + 1], O_RDWR | O_CREAT, S_IRUSR | S_IWUSR);
-
-              dup2(file, 1);
-              dup2(file, 2);
-              close(file);
-              // remove redirect from args list
-              argc = i;
-              // modify the ending of args parameter list
-              args[argc] = argend;
-              break;
-            }
+          if (processredirect(args, &argc) == 1) {
+            return 1;
           }
 
           if (execv(binpath, args) == -1) {
@@ -204,6 +233,8 @@ int main(int MainArgc, char *MainArgv[]) {
           return 0;
         }
       }
+      // wait for all children to finish processing, wait will return -1 if
+      // there's no children left to wait for
       while (wait(NULL) > 0)
         ;
     }
